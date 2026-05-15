@@ -1,10 +1,18 @@
 {
-  "name": "clipshot",
+  "name": "@m0rtzz/clipshot",
   "version": "1.0.18",
   "description": "Screenshot monitor CLI tool",
   "main": "dist/index.js",
   "bin": {
     "clipshot": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
     "build": "tsc",
@@ -20,7 +28,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/HendrikYtt/clipshot.git"
+    "url": "https://github.com/M0rtzz/clipshot.git"
   },
   "devDependencies": {
     "@types/node": "^25.0.10",
