@@ -3,6 +3,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { getDefaultLocalSaveDir, getDefaultRemoteSaveDir, loadConfig } from "./config";
 
 const POLL_INTERVAL_MS = 200;
 const LOG_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
@@ -163,12 +164,7 @@ function generateFilename(): string {
   return `screenshot-${timestamp}.png`;
 }
 
-function getLocalScreenshotDir(): string {
-  return path.join(os.homedir(), "clipshot-screenshots");
-}
-
-function saveLocal(imageBuffer: Buffer, filename: string): { success: boolean; path: string } {
-  const dir = getLocalScreenshotDir();
+function saveLocal(imageBuffer: Buffer, filename: string, dir: string): { success: boolean; path: string } {
   const filePath = path.join(dir, filename);
   try {
     if (!fs.existsSync(dir)) {
@@ -192,15 +188,69 @@ function getRemoteHomePath(remote: string): string {
   return "~";
 }
 
-async function pipeToRemote(imageBuffer: Buffer, remote: string, filename: string): Promise<{ success: boolean; path: string; error?: string }> {
+function escapeForDoubleQuotes(value: string): string {
+  return value.replace(/["\\$`]/g, "\\$&");
+}
+
+function buildRemoteDirExpression(remoteDir: string): string {
+  const normalized = remoteDir.replace(/\\/g, "/");
+
+  if (normalized === "~") {
+    return '"$HOME"';
+  }
+
+  if (normalized.startsWith("~/")) {
+    return `"$HOME/${escapeForDoubleQuotes(normalized.slice(2))}"`;
+  }
+
+  if (normalized.startsWith("/")) {
+    return `"${escapeForDoubleQuotes(normalized)}"`;
+  }
+
+  return `"$HOME/${escapeForDoubleQuotes(normalized)}"`;
+}
+
+function getRemoteDisplayDir(remote: string, remoteDir: string): string {
+  const normalized = remoteDir.replace(/\\/g, "/");
   const homeDir = getRemoteHomePath(remote);
-  const remotePath = `${homeDir}/clipshot-screenshots/${filename}`;
+
+  if (normalized === "~") {
+    return homeDir;
+  }
+
+  if (normalized.startsWith("~/")) {
+    if (homeDir === "~") {
+      return normalized;
+    }
+    return path.posix.join(homeDir, normalized.slice(2));
+  }
+
+  if (normalized.startsWith("/")) {
+    return normalized;
+  }
+
+  if (homeDir === "~") {
+    return `~/${normalized}`;
+  }
+
+  return path.posix.join(homeDir, normalized);
+}
+
+async function pipeToRemote(
+  imageBuffer: Buffer,
+  remote: string,
+  filename: string,
+  remoteDir: string
+): Promise<{ success: boolean; path: string; error?: string }> {
+  const remotePath = path.posix.join(getRemoteDisplayDir(remote, remoteDir), filename);
+  const remoteDirExpr = buildRemoteDirExpression(remoteDir);
+  const escapedFilename = escapeForDoubleQuotes(filename);
 
   return new Promise((resolve) => {
-    // Use ~ in the command so SSH resolves it correctly
+    const remoteCommand = `remote_dir=${remoteDirExpr}; mkdir -p "$remote_dir" && cat > "$remote_dir/${escapedFilename}"`;
     const proc = spawn("ssh", [
       remote,
-      `mkdir -p ~/clipshot-screenshots && cat > ~/clipshot-screenshots/${filename}`
+      remoteCommand,
     ], {
       windowsHide: true,
     });
@@ -258,6 +308,10 @@ async function copyToClipboard(text: string): Promise<void> {
 }
 
 export async function startMonitor(remote: string): Promise<void> {
+  const config = loadConfig();
+  const localSaveDir = config?.localSaveDir ?? getDefaultLocalSaveDir();
+  const remoteSaveDir = config?.remoteSaveDir ?? getDefaultRemoteSaveDir();
+
   // Initialize logging
   logFile = createNewLogFile();
   logStartTime = Date.now();
@@ -268,7 +322,9 @@ export async function startMonitor(remote: string): Promise<void> {
   log(`Environment: ${env}`);
   log(`Log file: ${logFile}`);
   if (remote === "local") {
-    log(`Saving to: ${getLocalScreenshotDir()}`);
+    log(`Saving to: ${localSaveDir}`);
+  } else {
+    log(`Remote save dir: ${remoteSaveDir}`);
   }
   log("");
   log("Monitoring clipboard... (Ctrl+C to stop)");
@@ -298,7 +354,7 @@ export async function startMonitor(remote: string): Promise<void> {
         log(`New screenshot: ${filename} (${size}KB)`);
 
         if (remote === "local") {
-          const result = saveLocal(imageBuffer, filename);
+          const result = saveLocal(imageBuffer, filename, localSaveDir);
           if (result.success) {
             log(`  -> Saved: ${result.path}`);
             await copyToClipboard(result.path);
@@ -307,7 +363,7 @@ export async function startMonitor(remote: string): Promise<void> {
             log(`  -> Failed to save locally`);
           }
         } else {
-          const result = await pipeToRemote(imageBuffer, remote, filename);
+          const result = await pipeToRemote(imageBuffer, remote, filename, remoteSaveDir);
           if (result.success) {
             log(`  -> Sent to ${remote}:${result.path}`);
             await copyToClipboard(result.path);

@@ -10,10 +10,56 @@ export interface SSHHost {
 
 export interface Config {
   remotes: string[];
+  localSaveDir: string;
+  remoteSaveDir: string;
 }
 
 export function getConfigPath(): string {
   return path.join(os.homedir(), ".config", "clipshot", "config.json");
+}
+
+export function getDefaultLocalSaveDir(): string {
+  return path.join(os.homedir(), "clipshot-screenshots");
+}
+
+export function getDefaultRemoteSaveDir(): string {
+  return "~/clipshot-screenshots";
+}
+
+function expandHomeDir(dir: string): string {
+  if (dir === "~") {
+    return os.homedir();
+  }
+
+  if (dir.startsWith("~/") || dir.startsWith("~\\")) {
+    return path.join(os.homedir(), dir.slice(2));
+  }
+
+  return dir;
+}
+
+export function resolveLocalSaveDir(dir?: string): string {
+  const trimmed = dir?.trim();
+  const target = trimmed && trimmed.length > 0 ? trimmed : getDefaultLocalSaveDir();
+  return path.resolve(expandHomeDir(target));
+}
+
+export function normalizeRemoteSaveDir(dir?: string): string {
+  const trimmed = dir?.trim();
+  const target = trimmed && trimmed.length > 0 ? trimmed : getDefaultRemoteSaveDir();
+  return target.replace(/\\/g, "/");
+}
+
+function normalizeConfig(config: Partial<Config>): Config {
+  const remotes = Array.isArray(config.remotes)
+    ? config.remotes.filter((remote): remote is string => typeof remote === "string" && remote.trim().length > 0)
+    : [];
+
+  return {
+    remotes,
+    localSaveDir: resolveLocalSaveDir(config.localSaveDir),
+    remoteSaveDir: normalizeRemoteSaveDir(config.remoteSaveDir),
+  };
 }
 
 export function loadConfig(): Config | null {
@@ -22,7 +68,7 @@ export function loadConfig(): Config | null {
     return null;
   }
   const content = fs.readFileSync(configPath, "utf-8");
-  return JSON.parse(content);
+  return normalizeConfig(JSON.parse(content) as Partial<Config>);
 }
 
 export function saveConfig(config: Config): void {
@@ -31,7 +77,7 @@ export function saveConfig(config: Config): void {
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true });
   }
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+  fs.writeFileSync(configPath, JSON.stringify(normalizeConfig(config), null, 2) + "\n");
 }
 
 export function detectSSHRemotes(): SSHHost[] {

@@ -28,9 +28,9 @@ export async function promptConfirm(message: string): Promise<boolean> {
   }
 }
 
-export async function promptInput(message: string): Promise<string> {
+export async function promptInput(message: string, initial?: string): Promise<string> {
   try {
-    const prompt = new Input({ name: "input", message });
+    const prompt = new Input({ name: "input", message, initial });
     return await prompt.run();
   } catch {
     handleCancel();

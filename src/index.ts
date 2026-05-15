@@ -4,7 +4,17 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { spawn, execSync } from "child_process";
-import { Config, loadConfig, saveConfig, detectSSHRemotes, detectSSHFromHistory } from "./config";
+import {
+  Config,
+  loadConfig,
+  saveConfig,
+  detectSSHRemotes,
+  detectSSHFromHistory,
+  getDefaultLocalSaveDir,
+  getDefaultRemoteSaveDir,
+  resolveLocalSaveDir,
+  normalizeRemoteSaveDir,
+} from "./config";
 import { promptConfirm, promptSelect, promptInput, promptMultiSelect } from "./prompts";
 import { startMonitor } from "./monitor";
 
@@ -186,7 +196,7 @@ Commands:
   start      Start monitoring in background
   stop       Stop background process
   status     Show if running
-  config     Modify configuration
+  config     Modify remotes and save directories
   uninstall  Remove config and stop process
 
 Run without command to setup/configure.
@@ -241,18 +251,22 @@ function showStatus(): void {
 async function runConfig(): Promise<Config> {
   let config: Config | null = loadConfig();
 
-  if (!config || config.remotes.length === 0) {
-    if (!config) {
-      console.log("Welcome! Let's add some SSH remotes.\n");
-    } else {
-      console.log("No remotes configured. Let's add some.\n");
-    }
+  if (!config) {
+    console.log("Welcome! Let's configure clipshot.\n");
+    config = {
+      remotes: [],
+      localSaveDir: getDefaultLocalSaveDir(),
+      remoteSaveDir: getDefaultRemoteSaveDir(),
+    };
+  }
 
-    const remotes = await addRemotes([]);
-    config = { remotes };
-    saveConfig(config);
+  if (config.remotes.length === 0) {
+    console.log("SSH remotes: none\n");
 
-    if (remotes.length > 0) {
+    const setupRemotes = await promptConfirm("Configure SSH remotes now?");
+    if (setupRemotes) {
+      const remotes = await addRemotes([]);
+      config = { ...config, remotes };
       console.log(`\nSaved ${remotes.length} remote(s).`);
     }
   } else {
@@ -266,11 +280,37 @@ async function runConfig(): Promise<Config> {
       );
 
       const remotes = await addRemotes(toKeep);
-      config = { remotes };
-      saveConfig(config);
+      config = { ...config, remotes };
       console.log(`\nSaved ${remotes.length} remote(s).`);
     }
   }
+
+  console.log(`\nLocal save directory: ${config.localSaveDir}\n`);
+
+  const modifyLocalSaveDir = await promptConfirm("Modify local save directory?");
+  if (modifyLocalSaveDir) {
+    const input = await promptInput("Enter local save directory", config.localSaveDir);
+    config = {
+      ...config,
+      localSaveDir: resolveLocalSaveDir(input || config.localSaveDir),
+    };
+    console.log(`\nUpdated local save directory: ${config.localSaveDir}`);
+  }
+
+  console.log(`\nRemote save directory: ${config.remoteSaveDir}\n`);
+
+  const modifyRemoteSaveDir = await promptConfirm("Modify remote save directory?");
+  if (modifyRemoteSaveDir) {
+    const input = await promptInput("Enter remote save directory", config.remoteSaveDir);
+    config = {
+      ...config,
+      remoteSaveDir: normalizeRemoteSaveDir(input || config.remoteSaveDir),
+    };
+    console.log(`\nUpdated remote save directory: ${config.remoteSaveDir}`);
+  }
+
+  saveConfig(config);
+  console.log("\nConfiguration saved.");
 
   return config;
 }
@@ -278,8 +318,8 @@ async function runConfig(): Promise<Config> {
 async function startCommand(): Promise<void> {
   const config = loadConfig();
 
-  if (!config || config.remotes.length === 0) {
-    console.log("No remotes configured. Run 'clipshot' first to set up.");
+  if (!config) {
+    console.log("No configuration found. Run 'clipshot' first to set up.");
     process.exit(1);
   }
 
@@ -352,8 +392,7 @@ async function main(): Promise<void> {
   const config = await runConfig();
 
   if (config.remotes.length === 0) {
-    console.log("No remotes configured. Run clipshot again to add remotes.");
-    process.exit(0);
+    console.log("No SSH remotes configured. Starting in local mode.");
   }
 
   console.log("\n--- Starting monitor ---\n");

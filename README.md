@@ -23,15 +23,15 @@ clipshot              Setup config and start monitoring
 clipshot start        Start monitoring (select target)
 clipshot stop         Stop monitoring
 clipshot status       Show running status and target
-clipshot config       Modify remotes configuration
+clipshot config       Modify remotes and save directories
 clipshot uninstall    Remove config files
 ```
 
 ## Features
 
 - Auto-detects SSH remotes from `~/.ssh/config` and shell history
-- **Local mode**: Saves to `~/clipshot-screenshots/`, copies path to clipboard
-- **Remote mode**: Uploads via SSH, copies remote path to clipboard
+- **Local mode**: Saves to a configurable local directory, copies path to clipboard
+- **Remote mode**: Uploads via SSH to a configurable remote directory, copies remote path to clipboard
 - Fast SSH with ControlMaster connection reuse
 - WSL support (reads Windows clipboard)
 
@@ -41,3 +41,11 @@ clipshot uninstall    Remove config files
 2. Detects changes via MD5 hash comparison
 3. Uploads via SSH or saves locally
 4. Copies absolute path to clipboard for easy pasting
+
+## Configuration
+
+`clipshot config` lets you:
+
+- manage SSH remotes
+- change the local screenshot directory (default: `~/clipshot-screenshots`)
+- change the remote screenshot directory for SSH uploads (default: `~/clipshot-screenshots`)
