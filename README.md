@@ -13,7 +13,15 @@ clipshot solves this - take a screenshot locally, and it automatically uploads t
 ## Install
 
 ```bash
-npm install -g clipshot
+echo "@m0rtzz:registry=https://npm.pkg.github.com" >> ~/.npmrc
+echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_PAT" >> ~/.npmrc
+npm install -g @m0rtzz/clipshot
+```
+
+Or install a specific release:
+
+```bash
+npm install -g @m0rtzz/clipshot@1.0.19
 ```
 
 ## Commands
@@ -49,3 +57,12 @@ clipshot uninstall    Remove config files
 - manage SSH remotes
 - change the local screenshot directory (default: `~/clipshot-screenshots`)
 - change the remote screenshot directory for SSH uploads (default: `~/clipshot-screenshots`)
+
+## Publish
+
+Push a `v*` tag to trigger the GitHub Actions workflow and publish to GitHub Packages:
+
+```bash
+git tag v1.0.19
+git push origin v1.0.19
+```
